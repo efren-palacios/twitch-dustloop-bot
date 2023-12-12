@@ -1,0 +1,191 @@
+const axios = require("axios");
+const Fuse = require("fuse.js");
+const fs = require("fs/promises");
+
+const baseUrl = "https://www.dustloop.com/wiki/index.php";
+const endpoint = "Special:CargoExport";
+const table = "MoveData_GGST";
+const fields =
+  "chara, input, name, damage, guard, startup, active, recovery, onBlock, onHit, invuln, type";
+const orderBy = "`chara`, `input`, `name`";
+const limit = 9999;
+const format = "json";
+
+const mainQuery = `${baseUrl}?title=${endpoint}&tables=${table}&fields=${encodeURIComponent(
+  fields
+)}&order+by=${encodeURIComponent(orderBy)}&limit=${limit}&format=${format}`;
+
+const cacheFilePath = "cachedData.json"; // Path to the cached data file
+const cacheDurationMs = 3600000; // 1 hour in milliseconds
+
+let cachedData = null;
+let lastCacheTime = 0;
+
+async function fetchData() {
+  // Check if cached data is still valid
+  const currentTime = Date.now();
+  if (!cachedData || currentTime - lastCacheTime > cacheDurationMs) {
+    try {
+      // Fetch the data from the source
+      const response = await axios.get(mainQuery);
+      cachedData = response.data;
+
+      // Update the cache timestamp
+      lastCacheTime = currentTime;
+
+      // Save the data to the cache file
+      await fs.writeFile(cacheFilePath, JSON.stringify(cachedData));
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      return [];
+    }
+  }
+  return cachedData;
+}
+
+// Function to load data from the cache file
+async function loadCachedData() {
+  try {
+    const data = await fs.readFile(cacheFilePath, "utf-8");
+    return JSON.parse(data);
+  } catch (error) {
+    console.error("Error reading cached data:", error);
+    return [];
+  }
+}
+
+// Initialize cached data from the cache file
+loadCachedData()
+  .then((data) => {
+    if (data) {
+      cachedData = data;
+    }
+  })
+  .catch((error) => {
+    console.error("Error loading cached data:", error);
+  });
+
+// Define a mapping of aliases to character names
+let characterAliases = {
+  AN: "Anji",
+  AS: "Asuka",
+  AX: "Axl",
+  BA: "Baiken",
+  BE: "Bedman",
+  BR: "Bridget",
+  CH: "Chipp",
+  EL: "Elphelt",
+  FA: "Faust",
+  GI: "Giovanna",
+  GO: "Goldlewis",
+  HA: "Happy",
+  IN: "I-No",
+  JC: "Jack-O",
+  JO: "Johnny",
+  KY: "Ky",
+  LE: "Leo",
+  MA: "May",
+  MI: "Millia",
+  NA: "Nagoriyuki",
+  PO: "Potemkin",
+  RA: "Ramlethal",
+  SI: "Sin",
+  SO: "Sol",
+  TE: "Testament",
+  ZA: "Zato",
+};
+
+async function fuzzyFindMoveDetails(characterAlias, inputOrMoveName, property) {
+  // Check if the provided characterAlias is an alias; if so, get the corresponding character name
+  const uppercaseCharacterAlias = characterAlias.toUpperCase();
+  const characterName =
+    characterAliases[uppercaseCharacterAlias] || characterAlias;
+
+  const data = await fetchData();
+  const options = {
+    includeScore: true,
+    keys: ["chara", "input", "name"],
+  };
+
+  // Convert characterName and inputOrMoveName to lowercase
+  const lowercaseCharacterName = characterName.toLowerCase();
+  const lowercaseInputOrMoveName = inputOrMoveName.toLowerCase();
+
+  // Filter the data to include only entries for the specified character
+  const filteredData = data.filter(
+    (entry) => entry.chara.toLowerCase() === lowercaseCharacterName
+  );
+
+  // Use the filtered data for the search
+  const filteredFuse = new Fuse(filteredData, options);
+
+  // Search by character name first
+  let result = filteredFuse.search({ chara: lowercaseCharacterName });
+
+  // If no result found for character name, return
+  if (result.length === 0) {
+    return "Character not found";
+  }
+
+  // If inputOrMoveName is not provided, return character details
+  if (!inputOrMoveName) {
+    const characterDetails = result[0].item;
+    return `Character: ${characterDetails.chara}`;
+  }
+
+  // Perform fuzzy search for the input or move name
+  result = filteredFuse.search({ input: lowercaseInputOrMoveName });
+
+  if (result.length > 0) {
+    const move = result[0].item;
+
+    // Convert the property key to lowercase for case-insensitive comparison
+    const lowercaseProperty = property.toLowerCase();
+
+    const humanReadableProperty = {
+      chara: "Character",
+      input: "Input Command",
+      name: "Move Name",
+      images: "Images",
+      damage: "Damage",
+      guard: "Guard Type",
+      startup: "Startup Frames",
+      active: "Active Frames",
+      recovery: "Recovery Time",
+      onBlock: "Advantage on Block",
+      onHit: "Advantage on Hit",
+      invul: "Invulnerability",
+      type: "Move Type",
+    };
+
+    // Find the matching property key (case-insensitive)
+    const matchingPropertyKey = Object.keys(humanReadableProperty).find(
+      (key) => key.toLowerCase() === lowercaseProperty
+    );
+
+    if (matchingPropertyKey) {
+      const formattedProperty = humanReadableProperty[matchingPropertyKey];
+      let propertyValue = move[matchingPropertyKey];
+
+      // Check if the property exists and is not null
+      if (propertyValue !== null && propertyValue !== undefined) {
+        // Convert numeric properties to strings
+        if (typeof propertyValue === "number") {
+          propertyValue = propertyValue.toString();
+        }
+
+        const capitalizedPropertyValue =
+          propertyValue.charAt(0).toUpperCase() + propertyValue.slice(1);
+        return `${formattedProperty}: ${capitalizedPropertyValue}`;
+      } else {
+        return `${formattedProperty}: N/A`; // Property is null or undefined
+      }
+    } else {
+      return "Invalid property"; // Property not found in humanReadableProperty
+    }
+  }
+
+  return "Move not found";
+}
+
+module.exports = { fuzzyFindMoveDetails };
