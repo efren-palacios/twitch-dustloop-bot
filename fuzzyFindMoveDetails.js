@@ -138,6 +138,10 @@ async function fuzzyFindMoveDetails(characterAlias, inputOrMoveName, property) {
     );
   }
 
+  if (!characterKey) {
+    return "Character not found";
+  }
+
   const data = await fetchData();
   const options = {
     includeScore: true,
