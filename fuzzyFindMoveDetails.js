@@ -95,11 +95,48 @@ let characterAliases = {
   ZA: "Zato",
 };
 
+const fullAlias = {
+  AN: "Anji Mito",
+  AS: "Asuka R♯",
+  AX: "Axl Low",
+  BA: "Baiken",
+  BE: "Bedman",
+  BR: "Bridget",
+  CH: "Chipp Zanuff",
+  EL: "Elphelt Valentine",
+  FA: "Faust",
+  GI: "Giovanna",
+  GO: "Goldlewis Dickinson",
+  HA: "Happy Chaos",
+  IN: "I-No",
+  JC: "Jack-O",
+  JO: "Johnny",
+  KY: "Ky Kiske",
+  LE: "Leo Whitefang",
+  MA: "May",
+  MI: "Millia Rage",
+  NA: "Nagoriyuki",
+  PO: "Potemkin",
+  RA: "Ramlethal",
+  SI: "Sin Kiske",
+  SO: "Sol Badguy",
+  TE: "Testament",
+  ZA: "Zato-1",
+};
+
 async function fuzzyFindMoveDetails(characterAlias, inputOrMoveName, property) {
-  // Check if the provided characterAlias is an alias; if so, get the corresponding character name
-  const uppercaseCharacterAlias = characterAlias.toUpperCase();
-  const characterName =
-    characterAliases[uppercaseCharacterAlias] || characterAlias;
+  let characterKey;
+
+  if (characterAliases[characterAlias.toUpperCase()]) {
+    characterKey = characterAlias.toUpperCase();
+  }
+
+  if (!characterKey) {
+    characterKey = Object.keys(characterAliases).find(
+      (key) =>
+        characterAliases[key].toLowerCase() === characterAlias.toLowerCase()
+    );
+  }
 
   const data = await fetchData();
   const options = {
@@ -107,40 +144,27 @@ async function fuzzyFindMoveDetails(characterAlias, inputOrMoveName, property) {
     keys: ["chara", "input", "name"],
   };
 
-  // Convert characterName and inputOrMoveName to lowercase
-  const lowercaseCharacterName = characterName.toLowerCase();
-  const lowercaseInputOrMoveName = inputOrMoveName.toLowerCase();
-
   // Filter the data to include only entries for the specified character
   const filteredData = data.filter(
-    (entry) => entry.chara.toLowerCase() === lowercaseCharacterName
+    (entry) => entry.chara === fullAlias[characterKey]
   );
 
   // Use the filtered data for the search
   const filteredFuse = new Fuse(filteredData, options);
 
-  // Search by character name first
-  let result = filteredFuse.search({ chara: lowercaseCharacterName });
+  // Search by character key first
+  let result = filteredFuse.search({ chara: fullAlias[characterKey] });
 
-  // If no result found for character name, return
+  // If no result found for character key, return
   if (result.length === 0) {
     return "Character not found";
   }
 
-  // If inputOrMoveName is not provided, return character details
-  if (!inputOrMoveName) {
-    const characterDetails = result[0].item;
-    return `Character: ${characterDetails.chara}`;
-  }
-
   // Perform fuzzy search for the input or move name
-  result = filteredFuse.search({ input: lowercaseInputOrMoveName });
+  result = filteredFuse.search({ input: inputOrMoveName });
 
   if (result.length > 0) {
     const move = result[0].item;
-
-    // Convert the property key to lowercase for case-insensitive comparison
-    const lowercaseProperty = property.toLowerCase();
 
     const humanReadableProperty = {
       chara: "Character",
@@ -160,7 +184,7 @@ async function fuzzyFindMoveDetails(characterAlias, inputOrMoveName, property) {
 
     // Find the matching property key (case-insensitive)
     const matchingPropertyKey = Object.keys(humanReadableProperty).find(
-      (key) => key.toLowerCase() === lowercaseProperty
+      (key) => key.toLowerCase() === property.toLowerCase()
     );
 
     if (matchingPropertyKey) {

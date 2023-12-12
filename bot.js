@@ -46,7 +46,7 @@ async function onMessageHandler(channel, context, msg, self) {
     if (params.length < 4) {
       client.say(
         channel,
-        'Usage: !framedata "character name" "move name" "property"'
+        'To retrieve character frame data, use the command: !framedata or !fd "character alias/name" "move name" "property". For example, you can type: !framedata SO 5K damage or !fd AS 2D startup. For more details, check out the command usage on GitHub: https://github.com/orctamer/twitch-dustloop-bot?tab=readme-ov-file#bot-commands'
       );
       return;
     }
